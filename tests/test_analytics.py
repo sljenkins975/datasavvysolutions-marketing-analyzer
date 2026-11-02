@@ -1,5 +1,7 @@
 """Exercise the data boundary and decision rules without starting a web server."""
 
+import csv
+import io
 import unittest
 
 import pandas as pd
@@ -84,6 +86,52 @@ class AnalyticsTests(unittest.TestCase):
         for content in [b"", b"\xff", b'date,date\n1,2', b'date,platform\n"unclosed', b"date,platform\n2026-01-01,Search,extra"]:
             with self.subTest(content=content), self.assertRaises(ValueError):
                 load_csv(content)
+
+    def test_count_precision_rejects_unsafe_values_before_rounding(self):
+        # Exercise raw CSV strings so pandas cannot hide fractions before validation.
+        for field in ["impressions", "clicks", "conversions"]:
+            for value in ["9007199254740992", "9007199254740993",
+                          "9007199254740992.5", "9007199254740990.5"]:
+                df = self.raw.astype(object)
+                df.loc[0, field] = value
+                with self.subTest(field=field, value=value), self.assertRaisesRegex(ValueError, field):
+                    load_csv(df.to_csv(index=False).encode())
+
+    def test_adjacent_large_counts_cannot_bypass_funnel_validation(self):
+        df = self.raw.astype(object)
+        df.loc[0, "impressions"] = "9007199254740992"
+        df.loc[0, "clicks"] = "9007199254740993"
+        with self.assertRaises(ValueError):
+            load_csv(df.to_csv(index=False).encode())
+
+    def test_safe_count_limit_applies_to_totals(self):
+        # Every downstream subset/group total stays exact if the full total fits.
+        for field in ["impressions", "clicks", "conversions"]:
+            df = self.raw.astype(object)
+            for count in ["impressions", "clicks", "conversions"]:
+                df[count] = ["9007199254740991", "0"]
+            result = load_csv(df.to_csv(index=False).encode())
+            self.assertEqual(summarize(result)[field], 9007199254740991)
+            self.assertEqual(campaign_performance(result).loc[0, field], 9007199254740991)
+            for count in ["impressions", "clicks", "conversions"]:
+                df.loc[1, count] = "1"
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "total.*9,007,199,254,740,991"):
+                load_csv(df.to_csv(index=False).encode())
+
+    def test_extra_columns_survive_filtered_csv_export(self):
+        df = self.raw.copy()
+        df["identifier"] = ["00123", "00000"]
+        df["status"] = ["NA", "NULL"]
+        df["note"] = ["", "NaN"]
+        df["description"] = ["  keep spaces  ", "é, quoted\ntext"]
+        loaded = load_csv(df.to_csv(index=False).encode("utf-8-sig"))
+        for platform in ["Search", "Social"]:
+            filtered = filter_data(loaded, [platform], ["Acquisition"], "2026-01-01", "2026-01-02")
+            # Parse the download as CSV text to check literal values, not inference.
+            exported = list(csv.DictReader(io.StringIO(filtered.to_csv(index=False))))[0]
+            original = df[df["platform"] == platform].iloc[0]
+            for field in ["identifier", "status", "note", "description"]:
+                self.assertEqual(exported[field], original[field])
 
     def test_large_totals_rejected(self):
         self.raw["spend"] = [1e308, 1e308]

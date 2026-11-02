@@ -35,7 +35,7 @@ The app adds no paid APIs, authentication, database, or persistent upload storag
 
 ## CSV schema
 
-Use a UTF-8 (optional BOM), comma-separated CSV with a unique header row. Required names are case-sensitive. Every row must contain every required value. Unknown additional columns are retained but do not affect calculations.
+Use a UTF-8 (optional BOM), comma-separated CSV with a unique header row. Required names are case-sensitive. Every row must contain every required value. Unknown additional columns are retained as text, including leading zeroes, blank cells, and literal `NA`, `NULL`, or `NaN` strings; they do not affect calculations. CSV quoting and line endings may be normalized on export.
 
 | Column | Format | Meaning |
 | --- | --- | --- |
@@ -52,6 +52,8 @@ Use a UTF-8 (optional BOM), comma-separated CSV with a unique header row. Requir
 date,platform,campaign,spend,impressions,clicks,conversions,revenue
 2026-01-01,Google Ads,Synthetic acquisition,125.00,5000,200,12,480.00
 ```
+
+Each count and its full-file column total must be at most **9,007,199,254,740,991 (2^53 − 1)** so KPI and chart aggregation retain exact whole-number counts. Counts are checked as decimal values before conversion; fractional counts are rejected even when binary floats would round them to integers.
 
 This example is synthetic. Use plain decimal numbers without `$`, thousands separators, `NaN`, or infinity. Empty files, missing/duplicate columns, invalid dates, blank labels, negative/non-finite numbers, fractional counts, impossible funnel counts, and overflowing totals produce actionable errors. Numeric errors identify CSV row positions (header = row 1). Fix the indicated field and re-upload; invalid rows are never silently removed.
 

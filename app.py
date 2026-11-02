@@ -37,6 +37,7 @@ with st.sidebar:
     with st.expander("CSV requirements"):
         st.write("Required columns: date, platform, campaign, spend, impressions, clicks, conversions, revenue.")
         st.write("Dates: YYYY-MM-DD. Counts: whole numbers. All numbers: finite and non-negative. Spend and revenue: USD. Clicks ≤ impressions; conversions ≤ clicks.")
+        st.caption("Count values and column totals must not exceed 9,007,199,254,740,991 to preserve exact counts.")
         st.caption("Each row is additive campaign activity for one calendar day. Do not mix currencies or overlapping totals.")
 
 try:
