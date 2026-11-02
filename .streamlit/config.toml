@@ -1,0 +1,15 @@
+# Native theming keeps controls consistent without replacing accessible widgets.
+[theme]
+base = "light"
+primaryColor = "#1763B8"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F1F5FA"
+textColor = "#122B49"
+font = "sans serif"
+
+[server]
+# A portfolio demo should not accept arbitrarily large uploads.
+maxUploadSize = 10
+
+[browser]
+gatherUsageStats = false
