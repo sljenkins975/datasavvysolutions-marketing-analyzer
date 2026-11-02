@@ -178,4 +178,12 @@ st.dataframe(campaign.style.format({
     for field, label in LABELS.items()
 }, width="stretch", hide_index=True)
 st.download_button("Download filtered results", filtered.to_csv(index=False), "marketing_filtered.csv", "text/csv")
+
+# Keep the invitation after the analysis so it does not interrupt the reporting workflow.
+st.divider()
+st.subheader("Work With Data Savvy Solutions")
+st.write("This demo showcases custom reporting and marketing analytics capabilities. "
+         "Bring your business questions to Data Savvy Solutions to discuss dashboards, "
+         "clear KPI definitions, and reporting tailored to your team.")
+st.link_button("Discuss your analytics needs", "https://datasavvysolutions.net/contact/")
 st.caption("Data Savvy Solutions • Marketing Performance Analyzer V1.2 • Portfolio demonstration")

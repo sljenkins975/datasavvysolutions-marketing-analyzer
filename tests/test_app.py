@@ -12,6 +12,22 @@ from streamlit.testing.v1 import AppTest
 
 
 class AppTests(unittest.TestCase):
+    def test_contact_invitation_with_sample_and_uploaded_data(self):
+        # Exercise both successful data paths so the invitation never depends on the sample dataset.
+        csv = (b"date,platform,campaign,spend,impressions,clicks,conversions,revenue\n"
+               b"2026-01-01,Search,Synthetic example,100,1000,100,10,200\n")
+        for uploaded in (None, io.BytesIO(csv)):
+            with self.subTest(uploaded=uploaded is not None), patch("streamlit.file_uploader", return_value=uploaded):
+                app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py")).run(timeout=60)
+                self.assertFalse(app.exception)
+                self.assertEqual(app.main.subheader[-1].value, "Work With Data Savvy Solutions")
+                self.assertTrue(any("custom reporting and marketing analytics capabilities" in item.value for item in app.markdown))
+                links = app.get("link_button")
+                self.assertEqual(len(links), 1)
+                self.assertEqual(links[0].proto.label, "Discuss your analytics needs")
+                self.assertEqual(links[0].proto.url, "https://datasavvysolutions.net/contact/")
+                self.assertEqual(len(app.metric), 10, "contact section preserves the V1.2 dashboard")
+
     def test_business_labels_formats_help_and_export(self):
         # Include a zero row to distinguish measured zero from missing ratios.
         csv = (b"date,platform,campaign,spend,impressions,clicks,conversions,revenue,identifier\n"
