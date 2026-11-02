@@ -136,36 +136,49 @@ def campaign_performance(df):
 
 
 def generate_insights(df):
-    """Use disclosed heuristics, not statistical significance or causal claims."""
+    """Explain existing ranking rules without claiming profit or cause and effect."""
     campaigns = campaign_performance(df)
     eligible = campaigns[(campaigns["spend"] > 0) & (campaigns["clicks"] >= MIN_CLICKS)
                          & (campaigns["conversions"] >= MIN_CONVERSIONS)]
     insights = []
-    # Stable sorting preserves alphabetical platform/campaign order when ratios tie.
-    for metric, ascending, title in [("roas", False, "Highest ROAS"), ("cpa", True, "Lowest CPA")]:
+    # Stable sorting keeps the example deterministic without suggesting a tie has a winner.
+    for metric, ascending, title in [("roas", False, "Revenue per ad dollar"), ("cpa", True, "Ad cost per conversion")]:
         ranked = eligible.dropna(subset=[metric]).sort_values(metric, ascending=ascending, kind="stable")
         if ranked.empty:
-            insights.append((title, "Insufficient evidence: no campaign has positive spend, 100 clicks, 10 conversions, and a defined ratio."))
-        else:
-            row = ranked.iloc[0]
-            value = f"{row[metric]:.2f}x" if metric == "roas" else f"${row[metric]:,.2f}"
-            ties = int((ranked[metric] == row[metric]).sum())
-            tie_note = f" Tied across {ties} campaigns; showing the first alphabetically." if ties > 1 else ""
-            insights.append((title, f"{row['platform']} / {row['campaign']}: {value}, based on ${row['spend']:,.2f} spend, {row['clicks']:,.0f} clicks and {row['conversions']:,.0f} conversions.{tie_note} Review tracking and business targets before changing budget."))
+            insights.append((title, "There is not enough data to compare campaigns yet. Each needs ad spend above $0.00, at least 100 clicks, 10 conversions, and enough information to calculate this measure. Check reporting and allow more time before changing your budget."))
+            continue
+        row = ranked.iloc[0]
+        value = f"{row[metric]:.2f}x" if metric == "roas" else f"${row[metric]:,.2f}"
+        ties = int((ranked[metric] == row[metric]).sum())
+        comparison = "highest reported revenue per ad dollar" if metric == "roas" else "lowest ad cost per recorded conversion"
+        meaning = (f"{value} means ${row[metric]:,.2f} in reported revenue for each $1.00 spent on ads. This is not profit."
+                   if metric == "roas" else f"{value} is the average ad spend for one recorded conversion, which may be a lead rather than a sale.")
+        context = (f"Shares the {comparison} across {ties:,} tied campaigns; this is the first alphabetically."
+                   if ties > 1 else f"Has the {comparison} among {len(ranked):,} eligible campaigns.")
+        if len(ranked) == 1:
+            context = "Only one campaign has enough data for this measure, so there is no comparison yet."
+        # Disclose apparent ties caused by display rounding without changing the exact ranking.
+        rounded_tie = ((ranked[metric] != row[metric]) & (ranked[metric].map(lambda v: f"{v:.2f}") == f"{row[metric]:.2f}")).any()
+        rounding_note = " Other results look equal at two decimals; small differences do not establish a meaningful lead." if rounded_tie else ""
+        insights.append((title, f"{row['platform']} / {row['campaign']}: {meaning} {context}{rounding_note} Based on ${row['spend']:,.2f} ad spend, {row['clicks']:,.0f} clicks and {row['conversions']:,.0f} conversions. Check tracking and business costs before testing a small budget change."))
     zero = campaigns[(campaigns["spend"] > 0) & (campaigns["conversions"] == 0)]
     below = eligible[eligible["roas"] < 1]
     small = campaigns[(campaigns["clicks"] < MIN_CLICKS) | (campaigns["conversions"] < MIN_CONVERSIONS)]
     undefined = campaigns[(campaigns["spend"] == 0) | campaigns["roas"].isna() | campaigns["cpa"].isna()]
     if not zero.empty:
         row = zero.sort_values("spend", ascending=False, kind="stable").iloc[0]
-        insights.append(("Investigate conversion tracking", f"{row['platform']} / {row['campaign']} spent ${row['spend']:,.2f} with zero conversions and {row['clicks']:,.0f} clicks. Check tracking, attribution lag and landing pages; CPA is undefined. This may be a small sample."))
+        ties = int((zero["spend"] == row["spend"]).sum())
+        tie_note = f" {ties:,} campaigns share this ad spend; showing the first alphabetically." if ties > 1 else ""
+        insights.append(("Ad spend with no recorded conversions", f"{row['platform']} / {row['campaign']} has the most ad spend among campaigns with no recorded conversions: ${row['spend']:,.2f} and {row['clicks']:,.0f} clicks.{tie_note} Cost per acquisition cannot be calculated without conversions. Check tracking, delays in reported results and the page visitors land on before pausing ads. There may be too little data to judge performance."))
     if not below.empty:
         row = below.sort_values("roas", kind="stable").iloc[0]
-        insights.append(("Investigate revenue recovery", f"{row['platform']} / {row['campaign']} has {row['roas']:.2f}x ROAS: reported revenue is below ad spend. Check attribution and margins before adjusting budget; 1.00x is not a profitability target."))
+        ties = int((below["roas"] == row["roas"]).sum())
+        tie_note = f" {ties:,} campaigns share this return; showing the first alphabetically." if ties > 1 else ""
+        insights.append(("Reported revenue is below ad spend", f"{row['platform']} / {row['campaign']} has the lowest eligible return: {row['roas']:.2f}x, or ${row['roas']:,.2f} in reported revenue per $1.00 spent on ads (rounded).{tie_note} Reported revenue is below ad spend before other business costs. Check tracking, reporting delays and margins before adjusting budget. ROAS does not measure profit, and 1.00x does not cover other costs."))
     if not small.empty:
-        insights.append(("Build more evidence", f"{len(small)} campaign(s) fall below 100 clicks or 10 conversions and are excluded from leader rankings. Gather more observations before drawing conclusions."))
+        insights.append(("Give smaller samples more time", f"{len(small):,} {'campaign has' if len(small) == 1 else 'campaigns have'} fewer than 100 clicks or 10 conversions. They are left out of comparisons because a few results can change the picture quickly. Check reporting and gather more data before making budget decisions."))
     if not undefined.empty:
-        insights.append(("Check undefined ratios", f"{len(undefined)} campaign(s) have zero spend or an undefined ROAS/CPA. Check missing cost or conversion reporting; undefined ratios are excluded from relevant rankings."))
+        insights.append(("Some measures cannot be calculated yet", f"{len(undefined):,} {'campaign has' if len(undefined) == 1 else 'campaigns have'} no ad spend or a revenue return or cost per conversion that cannot be calculated. N/A means unavailable, not zero performance. Check cost and conversion reporting before comparing these campaigns."))
     if zero.empty and below.empty:
-        insights.append(("Next investigation", "No campaign meets the zero-conversion or eligible ROAS-below-1.00x rules. Review attribution, margins and business targets; this does not establish profitability."))
+        insights.append(("Review business costs before your next test", "No campaigns triggered the checks for ad spend without conversions or eligible revenue below ad spend. This does not establish profitability or prove the ads caused sales. Review tracking, business costs and goals before testing a small change."))
     return insights

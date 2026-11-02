@@ -206,26 +206,26 @@ class AnalyticsTests(unittest.TestCase):
 
     def test_insight_leaders_and_investigation(self):
         result = dict(generate_insights(self.eligible_data()))
-        self.assertIn("Search / Acquisition: 4.00x", result["Highest ROAS"])
-        self.assertIn("Search / Acquisition: $10.00", result["Lowest CPA"])
-        self.assertIn("Social / Acquisition", result["Investigate revenue recovery"])
+        self.assertIn("Search / Acquisition: 4.00x", result["Revenue per ad dollar"])
+        self.assertIn("Search / Acquisition: $10.00", result["Ad cost per conversion"])
+        self.assertIn("Social / Acquisition", result["Reported revenue is below ad spend"])
 
     def test_insights_exclude_small_samples_and_zero_spend(self):
         df = self.eligible_data()
         df.loc[0, "conversions"] = 9
         df.loc[1, "spend"] = 0
         result = dict(generate_insights(df))
-        self.assertIn("Insufficient evidence", result["Highest ROAS"])
-        self.assertIn("Insufficient evidence", result["Lowest CPA"])
-        self.assertIn("1 campaign", result["Build more evidence"])
-        self.assertIn("1 campaign", result["Check undefined ratios"])
+        self.assertIn("not enough data", result["Revenue per ad dollar"])
+        self.assertIn("not enough data", result["Ad cost per conversion"])
+        self.assertIn("1 campaign", result["Give smaller samples more time"])
+        self.assertIn("1 campaign", result["Some measures cannot be calculated yet"])
 
     def test_zero_conversion_investigation(self):
         df = self.eligible_data()
         df.loc[1, "conversions"] = 0
         result = dict(generate_insights(df))
-        self.assertIn("Social / Acquisition", result["Investigate conversion tracking"])
-        self.assertIn("CPA is undefined", result["Investigate conversion tracking"])
+        self.assertIn("Social / Acquisition", result["Ad spend with no recorded conversions"])
+        self.assertIn("cannot be calculated without conversions", result["Ad spend with no recorded conversions"])
 
     def test_insight_ties_are_deterministic(self):
         df = self.eligible_data()
@@ -233,12 +233,74 @@ class AnalyticsTests(unittest.TestCase):
         df["revenue"] = 400
         first = generate_insights(df)
         self.assertEqual(first, generate_insights(df.iloc[::-1]))
-        self.assertIn("Tied across 2", dict(first)["Highest ROAS"])
-        self.assertIn("Next investigation", dict(first))
+        self.assertIn("2 tied campaigns", dict(first)["Revenue per ad dollar"])
+        self.assertIn("Review business costs before your next test", dict(first))
+
+    def test_insight_meanings_and_cautious_next_steps(self):
+        # Explain business meaning without treating reported returns as profit or causality.
+        result = dict(generate_insights(self.eligible_data()))
+        self.assertIn("$4.00 in reported revenue for each $1.00", result["Revenue per ad dollar"])
+        self.assertIn("This is not profit", result["Revenue per ad dollar"])
+        self.assertIn("among 2 eligible campaigns", result["Revenue per ad dollar"])
+        self.assertIn("may be a lead rather than a sale", result["Ad cost per conversion"])
+        self.assertIn("before testing a small budget change", result["Ad cost per conversion"])
+        self.assertIn("1.00x does not cover other costs", result["Reported revenue is below ad spend"])
+        df = self.eligible_data()
+        df["revenue"] = 400
+        text = dict(generate_insights(df))["Review business costs before your next test"]
+        self.assertIn("does not establish profitability or prove the ads caused sales", text)
+
+    def test_single_eligible_campaign_is_not_a_comparison(self):
+        # A sole eligible campaign cannot support a relative performance claim.
+        result = dict(generate_insights(self.eligible_data().iloc[:1]))
+        for title in ["Revenue per ad dollar", "Ad cost per conversion"]:
+            self.assertIn("no comparison yet", result[title])
+            self.assertNotIn("Has the", result[title])
+
+    def test_rounded_leaders_are_not_presented_as_meaningfully_different(self):
+        # Preserve exact ranking while acknowledging identical two-decimal displays.
+        df = self.eligible_data()
+        df["spend"] = [100.001, 100.002]
+        df["revenue"] = [400.001, 400.002]
+        result = dict(generate_insights(df))
+        for title in ["Revenue per ad dollar", "Ad cost per conversion"]:
+            self.assertIn("small differences do not establish a meaningful lead", result[title])
+        self.assertIn("Search / Acquisition", result["Revenue per ad dollar"])
+
+    def test_investigation_ties_disclose_the_example_selection(self):
+        # Investigation examples should be as transparent about ties as the leaders.
+        for conversions, revenue, title in [
+            (0, 0, "Ad spend with no recorded conversions"),
+            (10, 50, "Reported revenue is below ad spend"),
+        ]:
+            df = self.eligible_data()
+            df["spend"], df["conversions"], df["revenue"] = 100, conversions, revenue
+            first = generate_insights(df)
+            self.assertEqual(first, generate_insights(df.iloc[::-1]))
+            self.assertIn("2 campaigns share", dict(first)[title])
+            self.assertIn("first alphabetically", dict(first)[title])
+
+    def test_all_zero_insights_are_unavailable_not_poor_performance(self):
+        # Undefined measures must not turn into a zero return or a recommendation to stop ads.
+        df = self.eligible_data()
+        df.loc[:, ["spend", "impressions", "clicks", "conversions", "revenue"]] = 0
+        result = dict(generate_insights(df))
+        self.assertIn("N/A means unavailable, not zero performance", result["Some measures cannot be calculated yet"])
+        self.assertNotIn("Ad spend with no recorded conversions", result)
+        self.assertNotIn("Reported revenue is below ad spend", result)
+
+    def test_rankings_remain_specific_to_each_measure(self):
+        # Higher revenue per dollar can coexist with a higher cost per conversion.
+        df = self.eligible_data()
+        df["revenue"] = [200, 800]
+        result = dict(generate_insights(df))
+        self.assertIn("Social / Acquisition", result["Revenue per ad dollar"])
+        self.assertIn("Search / Acquisition", result["Ad cost per conversion"])
+        self.assertNotIn("best campaign", " ".join(result.values()).lower())
 
     def test_empty_insights(self):
         result = dict(generate_insights(validate_data(self.raw).iloc[:0]))
-        self.assertIn("Insufficient evidence", result["Highest ROAS"])
+        self.assertIn("not enough data", result["Revenue per ad dollar"])
 
 
 if __name__ == "__main__":

@@ -1,12 +1,22 @@
-# Data Savvy Solutions | Marketing Performance Analyzer V1.1
+# Data Savvy Solutions | Marketing Performance Analyzer V1.2
 
 A Streamlit portfolio demonstration that turns campaign activity into a performance snapshot, explainable executive insights, trends, and channel comparisons. The navy, blue, and white interface uses native controls, responsive KPI cards, and consistent USD/percentage/ratio formatting.
 
 **The built-in dataset is synthetic. It does not represent client results or evidence of business impact.** The fixed seed generates 1,825 fictional daily records across five platforms, from November 1, 2025 through October 31, 2026.
 
+## Version 1.2 presentation
+
+Executive Insights explain reported revenue per ad dollar and ad cost per recorded conversion, with cautious next steps. They distinguish revenue from profit and do not claim ads caused sales. A sole eligible campaign is not presented as a comparison; exact ties use a disclosed alphabetical example, and leading values that look equal after rounding are flagged.
+
+Cards, filters, chart legends and campaign headers use business-friendly names. The table shows Marketing Channel, Campaign Name, Ad Spend, Impressions, Clicks, Conversions, Revenue Generated, Click-Through Rate (CTR), Cost Per Click (CPC), Conversion Rate, Cost Per Acquisition (CPA), and Return on Ad Spend (ROAS). Hover or focus the help controls on KPI cards, or hover table headers, for plain-English explanations of the five derived measures.
+
+Currency uses USD dollar signs, thousands separators and two decimals; counts have thousands separators, rates are percentages, and ROAS is a two-decimal multiplier. Table labels and help use Streamlit `column_config`; the existing pandas Styler preserves consistent number formatting and N/A without changing numeric sorting. Display rounding never affects calculations or rankings. Revenue Generated means reported revenue, not verified additional sales caused by advertising.
+
+Internal column names, validation, calculations, sample data and downloaded CSV schemas are unchanged. The filtered-results download contains source records, not the campaign summary. No dependency, merge, deployment or budget automation is added.
+
 ## Run locally
 
-Use Python 3.11 or newer. Local V1.1 verification used Python 3.14.7, Streamlit 1.66.1, pandas 2.3.3, and Plotly 6.9.0. Dependencies retain bounded version ranges in `requirements.txt`; V1.1 raises the Streamlit minimum to 1.51 for its current responsive sizing API. No new package is required.
+Use Python 3.11 or newer. Local V1.2 verification used Python 3.14.7, Streamlit 1.66.1, pandas 2.3.3, and Plotly 6.9.0. Dependencies retain bounded version ranges in `requirements.txt`; The Streamlit minimum remains 1.51 for its responsive sizing API. No new package is required.
 
 ```bash
 # Clone the analyzer separately from the Data Savvy Solutions business website.
@@ -75,8 +85,8 @@ A zero denominator or unrepresentable ratio returns **N/A**, not zero or infinit
 
 Executive Insights recalculate after every filter change and group by **platform + campaign**:
 
-- **Highest ROAS / lowest CPA:** eligible campaigns require positive spend, at least 100 clicks and 10 conversions, and a defined relevant ratio. Each leader shows its spend, clicks, and conversions. Exact ties are disclosed and resolved alphabetically by platform, then campaign.
-- **Conversion investigation:** show the highest-spend campaign with positive spend and zero conversions. Investigate tracking, attribution lag, and landing pages; CPA is undefined. This rule can flag a small sample, which is explicitly disclosed.
+- **Highest ROAS / lowest CPA:** eligible campaigns require positive spend, at least 100 clicks and 10 conversions, and a defined relevant ratio. Each leader shows its spend, clicks, and conversions. Exact ties show a disclosed example alphabetically by platform, then campaign; no unique winner is implied. A sole eligible campaign is described without a comparison, and leading results that look equal at two decimals are flagged without changing the exact ranking.
+- **Conversion investigation:** show the highest-spend campaign with positive spend and zero conversions. Investigate tracking, attribution lag, and landing pages; CPA is undefined. This rule can flag a small sample, which is explicitly disclosed. Exact ties in investigation examples are disclosed as well.
 - **Revenue investigation:** show the lowest eligible campaign ROAS below 1.00x. This means reported revenue is below ad spend, not that a complete profit/loss calculation has been performed.
 - **Evidence and data gaps:** disclose campaigns below the click/conversion thresholds and those with zero spend or undefined ratios. If no investigation trigger fires, show a neutral next-step prompt.
 
@@ -91,7 +101,7 @@ python -m unittest discover -s tests -v
 python -m pip check
 ```
 
-The suite checks weighted KPI formulas, zero denominators, invalid inputs, inclusive dates, empty filters, threshold boundaries, deterministic ties, campaign grouping, synthetic reproducibility, and a real Streamlit page rerun. Streamlit's `AppTest` ships with Streamlit; no additional testing package is needed. Run the suite before merging; no hosted CI workflow is configured.
+The suite checks business-friendly labels and metric help, actual rendered table/card formats, chart labels, source CSV download compatibility, plain-English insight meaning, single-campaign and rounded comparisons, investigation ties, weighted KPI formulas, zero denominators, invalid inputs, inclusive dates, empty filters, threshold boundaries, deterministic ties, campaign grouping, synthetic reproducibility, and a real Streamlit page rerun. Streamlit's `AppTest` ships with Streamlit; no additional testing package is needed. Run the suite before merging; no hosted CI workflow is configured.
 
 For a local server check, run `python -m streamlit run app.py --server.headless true --server.address 127.0.0.1` and open the printed local URL. A successful server start alone does not execute the dashboard; the interaction test and browser review check rendering separately.
 
@@ -117,7 +127,9 @@ See Streamlit's official [deployment guide](https://docs.streamlit.io/deploy/str
 
 MIT.
 
-## Preview (synthetic data)
+## Previous preview (V1.1 synthetic data)
+
+These historical screenshots show the existing branding and layout. V1.2 replaces their KPI/table wording and insight copy as described above.
 
 ![Desktop KPI dashboard](docs/dashboard-desktop.jpg)
 
