@@ -123,12 +123,14 @@ def style_chart(fig):
 
 st.subheader("Performance over time")
 daily = filtered.groupby("date", as_index=False)[["spend", "revenue"]].sum()
-trend = px.line(daily, x="date", y=["spend", "revenue"], markers=True,
+# Short selections need point markers; long date ranges stay legible as lines.
+trend = px.line(daily, x="date", y=["spend", "revenue"], markers=len(daily) <= 31,
                 color_discrete_map={"spend": "#1763B8", "revenue": "#122B49"},
                 labels={"value": "Amount (USD)", "date": "Date", "variable": "Metric"})
+trend.for_each_trace(lambda trace: trace.update(name=trace.name.title()))
 trend.update_traces(hovertemplate="%{x|%b %d, %Y}<br>$%{y:,.2f}<extra>%{fullData.name}</extra>")
 trend.update_yaxes(tickprefix="$", tickformat=",.0f")
-st.plotly_chart(style_chart(trend), use_container_width=True)
+st.plotly_chart(style_chart(trend), width="stretch")
 st.caption("Daily totals for available records. Missing dates are not assumed to be zero activity.")
 
 st.subheader("Channel comparison")
@@ -141,7 +143,7 @@ if channel["roas"].notna().any():
                   color_discrete_sequence=["#1763B8"], labels={"roas": "Return on ad spend (x)", "platform": "Platform"})
     bars.update_traces(hovertemplate="%{x}<br>ROAS: %{y:.2f}x<extra></extra>")
     bars.update_yaxes(ticksuffix="x", tickformat=".2f")
-    st.plotly_chart(style_chart(bars), use_container_width=True)
+    st.plotly_chart(style_chart(bars), width="stretch")
 else:
     st.info("No defined channel ROAS for this selection. Check reported spend.")
 st.caption("Channels with undefined ROAS are omitted. Channel ratios include all selected records; leader rankings apply the sample thresholds above.")
@@ -153,6 +155,6 @@ st.dataframe(campaign.style.format({
     **{field: "{:,.0f}" for field in ["impressions", "clicks", "conversions"]},
     **{field: "${:,.2f}" for field in ["spend", "revenue", "cpc", "cpa"]},
     **{field: "{:.2%}" for field in ["ctr", "conversion_rate"]}, "roas": "{:.2f}x",
-}, na_rep="N/A"), use_container_width=True, hide_index=True)
+}, na_rep="N/A"), width="stretch", hide_index=True)
 st.download_button("Download filtered results", filtered.to_csv(index=False), "marketing_filtered.csv", "text/csv")
 st.caption("Data Savvy Solutions • Marketing Performance Analyzer V1.1 • Portfolio demonstration")
