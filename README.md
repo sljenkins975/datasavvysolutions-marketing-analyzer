@@ -4,6 +4,8 @@ A Streamlit portfolio demonstration that turns campaign activity into a performa
 
 **The built-in dataset is synthetic. It does not represent client results or evidence of business impact.** The fixed seed generates 1,825 fictional daily records across five platforms, from November 1, 2025 through October 31, 2026.
 
+After the results, **Work With Data Savvy Solutions** connects visitors to the [business contact page](https://datasavvysolutions.net/contact/) to discuss custom reporting and marketing analytics. It uses a native Streamlit link button and leaves V1.2 calculations, CSV handling, and insights unchanged. The contact invitation is tested with synthetic and uploaded data. Merging to the branch used by Streamlit Cloud may automatically redeploy the app; obtain owner approval before merging.
+
 ## Version 1.2 presentation
 
 Executive Insights explain reported revenue per ad dollar and ad cost per recorded conversion, with cautious next steps. They distinguish revenue from profit and do not claim ads caused sales. A sole eligible campaign is not presented as a comparison; exact ties use a disclosed alphabetical example, and leading values that look equal after rounding are flagged.
