@@ -5,7 +5,7 @@ import plotly.express as px
 import streamlit as st
 
 from analytics import (NUMERIC, campaign_performance, filter_data,
-                       generate_insights, load_csv, summarize, validate_data)
+                       generate_insights, load_csv, safe_divide, summarize, validate_data)
 from sample_data import make_sample_data
 
 st.set_page_config(page_title="Marketing Performance Analyzer | Data Savvy Solutions", page_icon="📊", layout="wide")
@@ -136,8 +136,8 @@ st.caption("Daily totals for available records. Missing dates are not assumed to
 
 st.subheader("Channel comparison")
 channel = filtered.groupby("platform", as_index=False)[NUMERIC].sum()
-# Reuse the KPI function so chart and card denominator rules stay identical.
-channel["roas"] = [summarize(filtered[filtered["platform"] == name])["roas"] for name in channel["platform"]]
+# Reuse grouped totals instead of rescanning every input row for each platform.
+channel["roas"] = [safe_divide(row.revenue, row.spend) for row in channel.itertuples()]
 channel = channel.sort_values("roas", ascending=False, kind="stable")
 if channel["roas"].notna().any():
     bars = px.bar(channel.dropna(subset=["roas"]), x="platform", y="roas", text_auto=".2f",

@@ -3,6 +3,7 @@
 import csv
 import io
 import math
+import re
 from decimal import Decimal, InvalidOperation
 
 import pandas as pd
@@ -17,9 +18,13 @@ MIN_CONVERSIONS = 10
 
 
 def _decimal_or_nan(value):
-    """Preserve count digits and let the existing row-error path handle bad cells."""
+    """Parse exact decimal digits; malformed cells use the shared row-error path."""
+    # Decimal itself permits underscores and Unicode digits that our CSV schema excludes.
+    text = str(value).strip()
+    if re.fullmatch(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?", text) is None:
+        return Decimal("NaN")
     try:
-        return Decimal(str(value))
+        return Decimal(text)
     except InvalidOperation:
         return Decimal("NaN")
 
@@ -28,6 +33,9 @@ def load_csv(content):
     """Check headers before pandas can silently rename duplicate columns."""
     try:
         text = content.decode("utf-8-sig")
+        # Pandas' CSV reader truncates at NUL, which can hide invalid numbers or metadata.
+        if "\x00" in text:
+            raise ValueError("CSV contains a NUL character. Remove NUL characters or re-export the source as UTF-8 CSV.")
         reader = csv.reader(io.StringIO(text), strict=True)
         header = next(reader, [])
         if len(header) != len(set(header)):
@@ -63,16 +71,12 @@ def validate_data(df):
         raise ValueError("date: use a valid YYYY-MM-DD calendar date in every row (for example, 2026-01-31).")
     df["date"] = dates
     for field in NUMERIC:
-        if field in COUNTS:
-            # Decimal checks fractions and bounds before any binary-float rounding.
-            values = df[field].map(_decimal_or_nan)
-            invalid = ~values.map(lambda value: value.is_finite() and value >= 0)
-        else:
-            values = pd.to_numeric(df[field], errors="coerce")
-            invalid = ~values.map(lambda value: math.isfinite(value) and value >= 0)
+        # Use one exact parser for counts and currency before any float conversion.
+        values = df[field].map(_decimal_or_nan)
+        invalid = ~values.map(lambda value: value.is_finite() and value >= 0)
         if invalid.any():
             rows = ", ".join(str(i + 2) for i, bad in enumerate(invalid) if bad)[:100]
-            raise ValueError(f"{field}: use finite, non-negative numbers without currency symbols or blanks. CSV row(s): {rows}.")
+            raise ValueError(f"{field}: use finite, non-negative decimal numbers with ASCII digits; no underscores, currency symbols or blanks. CSV row(s): {rows}.")
         if field in COUNTS:
             if (values > MAX_EXACT_COUNT).any():
                 raise ValueError(f"{field}: counts must not exceed {MAX_EXACT_COUNT:,}; reduce the count values.")
@@ -81,7 +85,13 @@ def validate_data(df):
             if sum(int(value) for value in values) > MAX_EXACT_COUNT:
                 raise ValueError(f"{field}: total must not exceed {MAX_EXACT_COUNT:,}; reduce the dataset's counts.")
         # Bounded count totals remain exact when aggregated alongside currency floats.
-        df[field] = values.astype(float)
+        converted = values.astype(float)
+        # A nonzero value rounded to zero changes ROAS/CPA semantics; reject it explicitly.
+        invalid = ~converted.map(math.isfinite) | ((values != 0) & (converted == 0))
+        if invalid.any():
+            rows = ", ".join(str(i + 2) for i, bad in enumerate(invalid) if bad)[:100]
+            raise ValueError(f"{field}: value is outside the supported numeric range. Reduce very large values or use a representable nonzero amount. CSV row(s): {rows}.")
+        df[field] = converted
         if sum(df[field]) == math.inf:
             raise ValueError(f"{field}: total is too large; reduce the numeric values.")
     if (df["clicks"] > df["impressions"]).any() or (df["conversions"] > df["clicks"]).any():
@@ -94,7 +104,8 @@ def safe_divide(numerator, denominator):
     if not denominator:
         return None
     result = numerator / denominator
-    return result if math.isfinite(result) else None
+    # A ratio too small to represent is undefined, just like an overflowing ratio.
+    return result if math.isfinite(result) and (result != 0 or numerator == 0) else None
 
 
 def summarize(df):

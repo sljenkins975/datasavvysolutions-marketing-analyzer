@@ -87,6 +87,52 @@ class AnalyticsTests(unittest.TestCase):
             with self.subTest(content=content), self.assertRaises(ValueError):
                 load_csv(content)
 
+    def test_malformed_numeric_syntax_is_rejected(self):
+        # Decimal accepts underscores and Unicode digits unless grammar is checked first.
+        for field in ["spend", "impressions", "clicks", "conversions", "revenue"]:
+            for value in ["1__0", "__1__", "1_0", "1e_1", "１", "1,000", "0x10"]:
+                df = self.raw.astype(object)
+                df.loc[0, ["impressions", "clicks", "conversions"]] = [100, 10, 1]
+                df.loc[0, field] = value
+                with self.subTest(field=field, value=value):
+                    with self.assertRaisesRegex(ValueError, field):
+                        validate_data(df)
+                    with self.assertRaisesRegex(ValueError, field):
+                        load_csv(df.to_csv(index=False).encode())
+
+    def test_supported_numeric_notation_remains_valid(self):
+        # Preserve existing decimal/scientific notation and surrounding whitespace.
+        for value in ["10", "10.0", "10.", "+10", " 10 ", "1e1", "100e-1"]:
+            df = self.raw.astype(object)
+            df.loc[0, "impressions"] = value
+            with self.subTest(value=value):
+                self.assertEqual(load_csv(df.to_csv(index=False).encode()).loc[0, "impressions"], 10)
+
+    def test_nul_bytes_are_rejected_before_csv_inference(self):
+        for field in ["date", "platform", "clicks", "metadata"]:
+            df = self.raw.astype(object)
+            df["metadata"] = "ABC"
+            df.loc[0, field] = str(df.loc[0, field]) + "\x00hidden"
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "NUL"):
+                load_csv(df.to_csv(index=False).encode())
+        content = self.raw.to_csv(index=False).replace("impressions", "impressions\x00hidden")
+        with self.assertRaisesRegex(ValueError, "NUL"):
+            load_csv(content.encode())
+
+    def test_nonzero_money_cannot_silently_underflow_to_zero(self):
+        for field in ["spend", "revenue"]:
+            for value in ["1e-999", "1e999"]:
+                df = self.raw.astype(object)
+                df.loc[0, field] = value
+                with self.subTest(field=field, value=value), self.assertRaisesRegex(ValueError, field):
+                    load_csv(df.to_csv(index=False).encode())
+            df.loc[0, field] = "0e-999"
+            self.assertEqual(load_csv(df.to_csv(index=False).encode()).loc[0, field], 0)
+
+    def test_underflow_ratios_are_undefined_not_zero(self):
+        self.assertIsNone(safe_divide(1e-308, 1e308))
+        self.assertEqual(safe_divide(0, 1e308), 0)
+
     def test_count_precision_rejects_unsafe_values_before_rounding(self):
         # Exercise raw CSV strings so pandas cannot hide fractions before validation.
         for field in ["impressions", "clicks", "conversions"]:
