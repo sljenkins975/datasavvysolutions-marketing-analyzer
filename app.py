@@ -8,6 +8,24 @@ from analytics import (NUMERIC, campaign_performance, filter_data,
                        generate_insights, load_csv, safe_divide, summarize, validate_data)
 from sample_data import make_sample_data
 
+# Display metadata never renames source columns, preserving CSV compatibility.
+LABELS = {
+    "platform": "Marketing Channel", "campaign": "Campaign Name",
+    "spend": "Ad Spend", "impressions": "Impressions", "clicks": "Clicks",
+    "conversions": "Conversions", "revenue": "Revenue Generated",
+    "ctr": "Click-Through Rate (CTR)", "cpc": "Cost Per Click (CPC)",
+    "conversion_rate": "Conversion Rate", "cpa": "Cost Per Acquisition (CPA)",
+    "roas": "Return on Ad Spend (ROAS)",
+}
+# Explain what each measure represents wherever people encounter it.
+HELP = {
+    "ctr": "The percentage of ad views that led to a click: clicks divided by impressions.",
+    "cpc": "Average ad spend for each click: ad spend divided by clicks.",
+    "cpa": "Average ad spend for each recorded conversion: ad spend divided by conversions. A conversion may be a lead, not a new customer.",
+    "conversion_rate": "The percentage of clicks that led to a recorded conversion: conversions divided by clicks.",
+    "roas": "Reported revenue per dollar spent on ads: revenue divided by ad spend. A 2.00x return means $2.00 revenue per $1.00 in ads, before other costs. This is not profit.",
+}
+
 st.set_page_config(page_title="Marketing Performance Analyzer | Data Savvy Solutions", page_icon="📊", layout="wide")
 # Limit CSS to presentation; native Streamlit controls retain keyboard support.
 st.markdown("""
@@ -23,13 +41,13 @@ h1, h2, h3 {color: #122B49; letter-spacing: -0.025em;}
 }
 </style>
 """, unsafe_allow_html=True)
-st.caption("DATA SAVVY SOLUTIONS  /  PORTFOLIO DEMONSTRATION  /  V1.1")
+st.caption("DATA SAVVY SOLUTIONS  /  PORTFOLIO DEMONSTRATION  /  V1.2")
 st.title("Marketing Performance Analyzer")
 st.write("Turn campaign reporting into clear performance decisions.")
 
 with st.sidebar:
     st.header("Data Savvy Solutions")
-    st.caption("Marketing intelligence • Version 1.1")
+    st.caption("Marketing intelligence • Version 1.2")
     st.divider()
     st.subheader("Data source")
     uploaded = st.file_uploader("Upload a CSV", type=["csv"], help="UTF-8 CSV, up to 10 MB. Download the synthetic sample for the required column format.")
@@ -54,8 +72,8 @@ else:
 
 with st.sidebar:
     st.subheader("Filters")
-    platforms = st.multiselect("Platforms", sorted(data["platform"].unique()), default=sorted(data["platform"].unique()))
-    campaigns = st.multiselect("Campaigns", sorted(data["campaign"].unique()), default=sorted(data["campaign"].unique()))
+    platforms = st.multiselect("Marketing Channels", sorted(data["platform"].unique()), default=sorted(data["platform"].unique()))
+    campaigns = st.multiselect("Campaign Names", sorted(data["campaign"].unique()), default=sorted(data["campaign"].unique()))
     start, end = data["date"].min().date(), data["date"].max().date()
     selected = st.date_input("Date range", value=(start, end), min_value=start, max_value=end)
     st.caption("Uploads are processed in memory for the active session. Use non-confidential data in this public demo.")
@@ -65,7 +83,7 @@ if len(selected) != 2:
     st.stop()
 filtered = filter_data(data, platforms, campaigns, selected[0], selected[1])
 if filtered.empty:
-    st.warning("No records match these filters. Select at least one platform and campaign, or expand the date range.")
+    st.warning("No records match these filters. Select at least one marketing channel and campaign, or expand the date range.")
     st.stop()
 
 kpi = summarize(filtered)
@@ -85,29 +103,27 @@ def fmt(value, kind="number"):
 
 
 st.subheader("Performance snapshot")
-st.caption(f"{selected[0]:%b %d, %Y} – {selected[1]:%b %d, %Y} • {len(filtered):,} records • {filtered['platform'].nunique()} platforms • USD")
+st.caption(f"{selected[0]:%b %d, %Y} – {selected[1]:%b %d, %Y} • {len(filtered):,} records • {filtered['platform'].nunique():,} marketing channels • USD")
 metrics = [
-    ("Ad spend", "spend", "currency"), ("Revenue", "revenue", "currency"),
-    ("ROAS", "roas", "ratio"), ("Conversions", "conversions", "number"),
-    ("CPA", "cpa", "currency"), ("Conversion rate", "conversion_rate", "percent"),
-    ("Impressions", "impressions", "number"), ("Clicks", "clicks", "number"),
-    ("CTR", "ctr", "percent"), ("CPC", "cpc", "currency"),
+    ("spend", "currency"), ("revenue", "currency"), ("roas", "ratio"),
+    ("conversions", "number"), ("cpa", "currency"), ("conversion_rate", "percent"),
+    ("impressions", "number"), ("clicks", "number"), ("ctr", "percent"), ("cpc", "currency"),
 ]
 for row in range(0, len(metrics), 2):
     columns = st.columns(2)
-    for col, (label, key, kind) in zip(columns, metrics[row:row + 2]):
-        col.metric(label, fmt(kpi[key], kind))
-st.caption("Ratios use summed totals, not averages of row-level ratios. N/A means the denominator is zero or the ratio cannot be represented.")
+    for col, (key, kind) in zip(columns, metrics[row:row + 2]):
+        col.metric(LABELS[key], fmt(kpi[key], kind), help=HELP.get(key))
+st.caption("Measures use totals for your selection. N/A means there is not enough information to calculate a measure, such as when there are no clicks, conversions or ad spend. Revenue Generated is reported revenue, not proof that ads caused sales.")
 
 st.subheader("Executive Insights")
-st.caption("Rule-based observations for the current filters. Recommendations are investigation prompts, not causal conclusions.")
+st.caption("A starting point for reviewing your selected data. Check tracking and business costs before changing your budget; past results do not guarantee future sales.")
 for title, explanation in generate_insights(filtered):
     with st.container(border=True):
         st.markdown(f"**{title}**")
         # Plain text prevents uploaded campaign names from injecting Markdown links.
         st.text(explanation)
 with st.expander("How insights and KPIs are calculated"):
-    st.write("Leader eligibility: positive spend, at least 100 clicks and 10 conversions per platform/campaign. These are demonstration heuristics, not statistical significance thresholds. Ties are disclosed and resolved alphabetically.")
+    st.write("Leader eligibility: positive spend, at least 100 clicks and 10 conversions per platform/campaign. These are demonstration heuristics, not statistical significance thresholds. Exact ties are disclosed; the first alphabetically is shown as an example, not a winner. Near-equal leading results that round to the same value are flagged.")
     st.write("Highest ROAS = revenue ÷ spend. Lowest CPA = spend ÷ conversions. Zero-conversion investigation shows the highest-spend campaign without conversions. Revenue investigation shows the lowest eligible ROAS below 1.00x. Revenue below spend is not a complete profit calculation.")
     st.write("CTR = clicks ÷ impressions. CPC = spend ÷ clicks. Conversion rate = conversions ÷ clicks. Compare equivalent attribution windows and currencies. Business margins, lifetime value, attribution lag and incrementality are not modeled.")
 
@@ -128,9 +144,9 @@ daily = filtered.groupby("date", as_index=False)[["spend", "revenue"]].sum()
 trend = px.line(daily, x="date", y=["spend", "revenue"], markers=len(daily) <= 31,
                 color_discrete_map={"spend": "#1763B8", "revenue": "#122B49"},
                 labels={"value": "Amount (USD)", "date": "Date", "variable": "Metric"})
-trend.for_each_trace(lambda trace: trace.update(name=trace.name.title()))
+trend.for_each_trace(lambda trace: trace.update(name=LABELS[trace.name]))
 trend.update_traces(hovertemplate="%{x|%b %d, %Y}<br>$%{y:,.2f}<extra>%{fullData.name}</extra>")
-trend.update_yaxes(tickprefix="$", tickformat=",.0f")
+trend.update_yaxes(tickprefix="$", tickformat=",.2f")
 st.plotly_chart(style_chart(trend), width="stretch")
 st.caption("Daily totals for available records. Missing dates are not assumed to be zero activity.")
 
@@ -140,22 +156,26 @@ channel = filtered.groupby("platform", as_index=False)[NUMERIC].sum()
 channel["roas"] = [safe_divide(row.revenue, row.spend) for row in channel.itertuples()]
 channel = channel.sort_values("roas", ascending=False, kind="stable")
 if channel["roas"].notna().any():
-    bars = px.bar(channel.dropna(subset=["roas"]), x="platform", y="roas", text_auto=".2f",
-                  color_discrete_sequence=["#1763B8"], labels={"roas": "Return on ad spend (x)", "platform": "Platform"})
-    bars.update_traces(hovertemplate="%{x}<br>ROAS: %{y:.2f}x<extra></extra>")
+    bars = px.bar(channel.dropna(subset=["roas"]), x="platform", y="roas", text_auto=False,
+                  color_discrete_sequence=["#1763B8"], labels={"roas": LABELS["roas"], "platform": LABELS["platform"]})
+    bars.update_traces(texttemplate="%{y:.2f}x", hovertemplate="%{x}<br>ROAS: %{y:.2f}x<extra></extra>")
     bars.update_yaxes(ticksuffix="x", tickformat=".2f")
     st.plotly_chart(style_chart(bars), width="stretch")
 else:
     st.info("No defined channel ROAS for this selection. Check reported spend.")
-st.caption("Channels with undefined ROAS are omitted. Channel ratios include all selected records; leader rankings apply the sample thresholds above.")
+st.caption("ROAS compares reported revenue with ad spend, before other business costs. It does not measure profit. Channels with unavailable ROAS are omitted. Channel ratios include all selected records; leader rankings apply the sample thresholds above.")
 
 st.subheader("Campaign performance")
 campaign = campaign_performance(filtered)
-# Explicit column formats make currency, counts, percentages and ratios scannable.
+# Styler preserves thousands separators and N/A; column_config adds labels and help without overriding formats.
 st.dataframe(campaign.style.format({
     **{field: "{:,.0f}" for field in ["impressions", "clicks", "conversions"]},
     **{field: "${:,.2f}" for field in ["spend", "revenue", "cpc", "cpa"]},
     **{field: "{:.2%}" for field in ["ctr", "conversion_rate"]}, "roas": "{:.2f}x",
-}, na_rep="N/A"), width="stretch", hide_index=True)
+}, na_rep="N/A"), column_config={
+    field: (st.column_config.TextColumn(label) if field in ["platform", "campaign"]
+            else st.column_config.NumberColumn(label, help=HELP.get(field)))
+    for field, label in LABELS.items()
+}, width="stretch", hide_index=True)
 st.download_button("Download filtered results", filtered.to_csv(index=False), "marketing_filtered.csv", "text/csv")
-st.caption("Data Savvy Solutions • Marketing Performance Analyzer V1.1 • Portfolio demonstration")
+st.caption("Data Savvy Solutions • Marketing Performance Analyzer V1.2 • Portfolio demonstration")
