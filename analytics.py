@@ -3,13 +3,25 @@
 import csv
 import io
 import math
+from decimal import Decimal, InvalidOperation
 
 import pandas as pd
 
 NUMERIC = ["spend", "impressions", "clicks", "conversions", "revenue"]
 REQUIRED = {"date", "platform", "campaign", *NUMERIC}
+COUNTS = {"impressions", "clicks", "conversions"}
+# Keep all count totals exact in the float-based KPI and chart pipeline.
+MAX_EXACT_COUNT = 2**53 - 1
 MIN_CLICKS = 100
 MIN_CONVERSIONS = 10
+
+
+def _decimal_or_nan(value):
+    """Preserve count digits and let the existing row-error path handle bad cells."""
+    try:
+        return Decimal(str(value))
+    except InvalidOperation:
+        return Decimal("NaN")
 
 
 def load_csv(content):
@@ -24,7 +36,8 @@ def load_csv(content):
         for row_number, row in enumerate(reader, start=2):
             if row and len(row) != len(header):
                 raise ValueError(f"CSV row {row_number}: expected {len(header)} fields, found {len(row)}. Check commas and quoting.")
-        return validate_data(pd.read_csv(io.StringIO(text)))
+        # Preserve literal identifiers and NA-like labels until required fields are validated.
+        return validate_data(pd.read_csv(io.StringIO(text), dtype=str, keep_default_na=False))
     except (UnicodeError, csv.Error, pd.errors.ParserError, pd.errors.EmptyDataError) as exc:
         raise ValueError("Use a UTF-8, comma-separated CSV with a header and data rows. Download the sample for a template.") from exc
 
@@ -50,14 +63,24 @@ def validate_data(df):
         raise ValueError("date: use a valid YYYY-MM-DD calendar date in every row (for example, 2026-01-31).")
     df["date"] = dates
     for field in NUMERIC:
-        values = pd.to_numeric(df[field], errors="coerce")
-        invalid = ~values.map(lambda value: math.isfinite(value) and value >= 0)
+        if field in COUNTS:
+            # Decimal checks fractions and bounds before any binary-float rounding.
+            values = df[field].map(_decimal_or_nan)
+            invalid = ~values.map(lambda value: value.is_finite() and value >= 0)
+        else:
+            values = pd.to_numeric(df[field], errors="coerce")
+            invalid = ~values.map(lambda value: math.isfinite(value) and value >= 0)
         if invalid.any():
             rows = ", ".join(str(i + 2) for i, bad in enumerate(invalid) if bad)[:100]
             raise ValueError(f"{field}: use finite, non-negative numbers without currency symbols or blanks. CSV row(s): {rows}.")
-        if field in ["impressions", "clicks", "conversions"] and (values % 1 != 0).any():
-            raise ValueError(f"{field}: use whole-number counts, not fractional values.")
-        # Floats avoid integer overflow when pandas aggregates large input counts.
+        if field in COUNTS:
+            if (values > MAX_EXACT_COUNT).any():
+                raise ValueError(f"{field}: counts must not exceed {MAX_EXACT_COUNT:,}; reduce the count values.")
+            if values.map(lambda value: value != value.to_integral_value()).any():
+                raise ValueError(f"{field}: use whole-number counts, not fractional values.")
+            if sum(int(value) for value in values) > MAX_EXACT_COUNT:
+                raise ValueError(f"{field}: total must not exceed {MAX_EXACT_COUNT:,}; reduce the dataset's counts.")
+        # Bounded count totals remain exact when aggregated alongside currency floats.
         df[field] = values.astype(float)
         if sum(df[field]) == math.inf:
             raise ValueError(f"{field}: total is too large; reduce the numeric values.")
