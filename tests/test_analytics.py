@@ -81,7 +81,7 @@ class AnalyticsTests(unittest.TestCase):
     def test_csv_boundary(self):
         result = load_csv(self.raw.to_csv(index=False).encode("utf-8-sig"))
         self.assertEqual(len(result), 2)
-        for content in [b"", b"\xff", b'date,date\n1,2', b'date,platform\n"unclosed']:
+        for content in [b"", b"\xff", b'date,date\n1,2', b'date,platform\n"unclosed', b"date,platform\n2026-01-01,Search,extra"]:
             with self.subTest(content=content), self.assertRaises(ValueError):
                 load_csv(content)
 

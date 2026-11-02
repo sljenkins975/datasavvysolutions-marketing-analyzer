@@ -16,11 +16,16 @@ def load_csv(content):
     """Check headers before pandas can silently rename duplicate columns."""
     try:
         text = content.decode("utf-8-sig")
-        header = next(csv.reader(io.StringIO(text)), [])
+        reader = csv.reader(io.StringIO(text), strict=True)
+        header = next(reader, [])
         if len(header) != len(set(header)):
             raise ValueError("Duplicate column names: keep one column per required field.")
+        # Reject ragged records before pandas can reinterpret a field as an index.
+        for row_number, row in enumerate(reader, start=2):
+            if row and len(row) != len(header):
+                raise ValueError(f"CSV row {row_number}: expected {len(header)} fields, found {len(row)}. Check commas and quoting.")
         return validate_data(pd.read_csv(io.StringIO(text)))
-    except (UnicodeError, pd.errors.ParserError, pd.errors.EmptyDataError) as exc:
+    except (UnicodeError, csv.Error, pd.errors.ParserError, pd.errors.EmptyDataError) as exc:
         raise ValueError("Use a UTF-8, comma-separated CSV with a header and data rows. Download the sample for a template.") from exc
 
 
@@ -54,7 +59,7 @@ def validate_data(df):
             raise ValueError(f"{field}: use whole-number counts, not fractional values.")
         # Floats avoid integer overflow when pandas aggregates large input counts.
         df[field] = values.astype(float)
-        if not math.isfinite(df[field].sum()):
+        if sum(df[field]) == math.inf:
             raise ValueError(f"{field}: total is too large; reduce the numeric values.")
     if (df["clicks"] > df["impressions"]).any() or (df["conversions"] > df["clicks"]).any():
         raise ValueError("Clicks cannot exceed impressions and conversions cannot exceed clicks. Check the count columns in each row.")
